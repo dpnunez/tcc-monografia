@@ -86,28 +86,16 @@
 
 %Resumo em Portugues (no maximo 500 palavras)
 \begin{abstract}
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.
+Este trabalho investiga a integração entre Elixir e processamento massivamente paralelo em GPU por meio da biblioteca PolyHok, utilizada como ponte para a execução de kernels CUDA. A proposta utiliza Elixir como ambiente de coordenação de um fluxo de processamento de dados e CUDA como núcleo de computação densa para o cálculo do Índice de Vegetação por Diferença Normalizada (NDVI). O estudo será conduzido a partir de cenas multiespectrais Sentinel-2, usando as bandas B04, correspondente ao vermelho, e B08, correspondente ao infravermelho próximo. O NDVI foi escolhido por envolver uma operação ponto a ponto sobre matrizes bidimensionais, característica adequada para explorar paralelismo em GPU e analisar custos de transferência e integração.
+
+O objetivo principal é desenvolver e avaliar um pipeline Elixir-CUDA capaz de organizar a ingestão dos dados, preparar entradas, acionar kernels CUDA via PolyHok e coletar métricas de desempenho. Além da implementação, o trabalho prevê a definição de um dataset benchmark reprodutível, com critérios explícitos de seleção de cenas Sentinel-2, incluindo produto L2A, região fixa, limite de cobertura de nuvens, período temporal e tamanhos padronizados de recorte. A avaliação utilizará uma linha de base em CPU e, quando viável, uma implementação CUDA C/C++ direta, permitindo comparar não apenas ganhos de desempenho, mas também overheads associados à camada de integração. Espera-se, assim, contribuir com uma implementação documentada, um benchmark reprodutível e uma análise experimental da separação entre coordenação funcional em Elixir e computação densa em GPU.
 \end{abstract}
 
 %Resumo em Inglês (no maximo 500 palavras)
-\begin{englishabstract}{Titulo do Trabalho em Ingles}
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.
+\begin{englishabstract}{An Elixir-CUDA Pipeline for Parallel Processing of Sentinel-2 Images}
+This work investigates the integration between Elixir and massively parallel GPU processing through the PolyHok library, used as a bridge for executing CUDA kernels. The proposal uses Elixir as the coordination environment for a data processing flow and CUDA as the dense computation core for calculating the Normalized Difference Vegetation Index (NDVI). The study will be conducted using Sentinel-2 multispectral scenes, based on bands B04, corresponding to red, and B08, corresponding to near infrared. NDVI was chosen because it involves a pointwise operation over two-dimensional matrices, a characteristic that is suitable for exploring GPU parallelism and analyzing data transfer and integration costs.
+
+The main objective is to develop and evaluate an Elixir-CUDA pipeline capable of organizing data ingestion, preparing inputs, launching CUDA kernels through PolyHok, and collecting performance metrics. In addition to the implementation, the work includes the definition of a reproducible benchmark dataset, with explicit criteria for selecting Sentinel-2 scenes, including L2A product type, fixed region, cloud coverage limit, time period, and standardized crop sizes. The evaluation will use a CPU baseline and, when feasible, a direct CUDA C/C++ implementation, allowing the comparison of not only performance gains but also overheads associated with the integration layer. Therefore, the expected contribution is a documented implementation, a reproducible benchmark, and an experimental analysis of the separation between functional coordination in Elixir and dense computation on GPU.
 \end{englishabstract}
 
 %Lista de Figuras
