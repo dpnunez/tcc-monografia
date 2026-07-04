@@ -210,6 +210,36 @@ Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
 blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
 Bla blabla blablabla bla.
 
+\chapter{Metodologia}
+
+A metodologia deste trabalho será organizada como um estudo de caso experimental. Inicialmente, será realizado um levantamento bibliográfico sobre Elixir/BEAM, computação em GPU, CUDA, PolyHok, integração entre linguagens de alto nível e kernels acelerados, benchmarks reprodutíveis e processamento de dados multiespectrais. Também será feito o estudo dirigido da ferramenta PolyHok, incluindo documentação, repositório e exemplos disponíveis.
+
+Em seguida, será definido o dataset benchmark de cenas Sentinel-2 para o cálculo de NDVI. A fonte principal de dados será Sentinel-2 L2A, com uso das bandas B04, correspondente ao vermelho, e B08, correspondente ao infravermelho próximo. A banda SCL poderá ser utilizada para apoiar a identificação de nuvens, sombras ou pixels inválidos.
+
+A seleção das cenas seguirá critérios explícitos, incluindo produto Sentinel-2 L2A, presença das bandas B04 e B08, disponibilidade da banda SCL quando utilizada, limite máximo de cobertura de nuvens, tile ou região fixa, conjunto de datas selecionadas, resolução espacial e tamanho dos recortes processados. Os IDs dos produtos, metadados relevantes, critérios de exclusão e procedimento de preparação serão registrados para permitir reprodução dos experimentos. A pré-seleção poderá ser automatizada por consulta a catálogo ou API, mas a inclusão final das cenas exigirá verificação da presença das bandas necessárias, da cobertura de nuvens e da consistência entre os dados.
+
+O fluxo de processamento previsto inclui as seguintes etapas:
+
+\begin{enumerate}
+    \item Definição dos critérios de seleção das cenas Sentinel-2.
+    \item Pré-seleção e verificação das cenas, bandas e metadados.
+    \item Construção e documentação do dataset benchmark de NDVI.
+    \item Preparação dos dados de entrada, garantindo compatibilidade entre as bandas utilizadas.
+    \item Implementação da linha de base em CPU.
+    \item Implementação do núcleo de cálculo em CUDA via PolyHok.
+    \item Implementação, quando viável, de uma alternativa GPU semelhante para comparação.
+    \item Coordenação do fluxo de dados em Elixir.
+    \item Execução dos experimentos em lote.
+    \item Coleta separada de métricas de desempenho e overhead.
+    \item Análise dos resultados e discussão das limitações.
+\end{enumerate}
+
+O benchmark será centrado no cálculo de NDVI e na análise dos custos associados ao uso da GPU. Caso haja pré-processamento geoespacial externo, como conversão de formatos ou recorte de área, essa etapa será documentada e, quando pertinente, medida separadamente, mas não será confundida com o tempo do núcleo computacional. Serão coletadas métricas como tempo de preparação dos dados, transferência host-GPU, execução do kernel, retorno dos dados, overhead de chamada via PolyHok, tempo total do fluxo, throughput e speedup em relação à linha de base em CPU. A comparação CPU versus GPU será mantida como referência, mas a análise principal buscará explicar os overheads introduzidos pela integração com GPU e, se viável, contrastar PolyHok com uma alternativa GPU semelhante.
+
+Para garantir a robustez da avaliação, a metodologia incluirá uma etapa de validação detalhada dos resultados. Isso envolverá o uso de métodos estatísticos para confirmar a correção dos dados obtidos e a medição do ganho de desempenho em relação a um baseline claramente definido, com a indicação do nível de confiança dos resultados. Além disso, será dada atenção especial para que todo o experimento seja reprodutível, dada a proposta de construção de um benchmark documentado.
+
+Como saída complementar, poderão ser gerados agregados simples, como média do tile e histogramas, além de imagens PNG para visualização dos resultados. Esses produtos terão função de inspeção e apresentação do estudo de caso, sem caracterizar uma aplicação agronômica operacional.
+
 \chapter{Desenvolvimento}
 
 \section{Levantamento bibliográfico inicial}
