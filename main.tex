@@ -3,6 +3,9 @@
 \usepackage[utf8]{inputenc} % acentuacao
 \usepackage{graphicx} % para inserir figuras
 \usepackage[T1]{fontenc}
+\usepackage{tikz}
+\usepackage{float}
+\usetikzlibrary{arrows.meta,calc,fit,positioning}
 
 \hypersetup{
     hidelinks, % Remove coloração e caixas
@@ -94,14 +97,14 @@
 \begin{abstract}
 Este trabalho investiga a integração entre Elixir e processamento massivamente paralelo em GPU por meio da biblioteca PolyHok, utilizada como ponte para a execução de kernels CUDA. A proposta utiliza Elixir como ambiente de coordenação de um fluxo de processamento de dados e CUDA como núcleo de computação densa para o cálculo do Índice de Vegetação por Diferença Normalizada (NDVI). O estudo será conduzido a partir de cenas multiespectrais Sentinel-2, usando as bandas B04, correspondente ao vermelho, e B08, correspondente ao infravermelho próximo. O NDVI foi escolhido por envolver uma operação ponto a ponto sobre matrizes bidimensionais, característica adequada para explorar paralelismo em GPU e analisar custos de transferência e integração.
 
-O objetivo principal é desenvolver e avaliar um pipeline Elixir-CUDA capaz de organizar a ingestão dos dados, preparar entradas, acionar kernels CUDA via PolyHok e coletar métricas de desempenho. Além da implementação, o trabalho prevê a definição de um dataset benchmark reprodutível, com critérios explícitos de seleção de cenas Sentinel-2, incluindo produto L2A, região fixa, limite de cobertura de nuvens, período temporal e tamanhos padronizados de recorte. A avaliação utilizará uma linha de base em CPU e, quando viável, uma implementação CUDA C/C++ direta, permitindo comparar não apenas ganhos de desempenho, mas também overheads associados à camada de integração. Espera-se, assim, contribuir com uma implementação documentada, um benchmark reprodutível e uma análise experimental da separação entre coordenação funcional em Elixir e computação densa em GPU.
+O objetivo principal é desenvolver e avaliar um pipeline Elixir-CUDA capaz de organizar a ingestão dos dados, preparar entradas, acionar kernels CUDA via PolyHok e coletar métricas de desempenho. Além da implementação, o trabalho prevê a definição de um dataset benchmark reprodutível, com critérios explícitos de seleção de cenas Sentinel-2, incluindo produto L2A, região fixa, limite de cobertura de nuvens, período temporal e tamanhos padronizados de recorte. A avaliação terá como comparação principal a execução CUDA via PolyHok frente a outras implementações CUDA, permitindo analisar os overheads associados à camada de integração. Espera-se, assim, contribuir com uma implementação documentada, um benchmark reprodutível e uma análise experimental da separação entre coordenação funcional em Elixir e computação densa em GPU.
 \end{abstract}
 
 %Resumo em Inglês (no maximo 500 palavras)
 \begin{englishabstract}{An Elixir-CUDA Pipeline for Parallel Processing of Sentinel-2 Images}
 This work investigates the integration between Elixir and massively parallel GPU processing through the PolyHok library, used as a bridge for executing CUDA kernels. The proposal uses Elixir as the coordination environment for a data processing flow and CUDA as the dense computation core for calculating the Normalized Difference Vegetation Index (NDVI). The study will be conducted using Sentinel-2 multispectral scenes, based on bands B04, corresponding to red, and B08, corresponding to near infrared. NDVI was chosen because it involves a pointwise operation over two-dimensional matrices, a characteristic that is suitable for exploring GPU parallelism and analyzing data transfer and integration costs.
 
-The main objective is to develop and evaluate an Elixir-CUDA pipeline capable of organizing data ingestion, preparing inputs, launching CUDA kernels through PolyHok, and collecting performance metrics. In addition to the implementation, the work includes the definition of a reproducible benchmark dataset, with explicit criteria for selecting Sentinel-2 scenes, including L2A product type, fixed region, cloud coverage limit, time period, and standardized crop sizes. The evaluation will use a CPU baseline and, when feasible, a direct CUDA C/C++ implementation, allowing the comparison of not only performance gains but also overheads associated with the integration layer. Therefore, the expected contribution is a documented implementation, a reproducible benchmark, and an experimental analysis of the separation between functional coordination in Elixir and dense computation on GPU.
+The main objective is to develop and evaluate an Elixir-CUDA pipeline capable of organizing data ingestion, preparing inputs, launching CUDA kernels through PolyHok, and collecting performance metrics. In addition to the implementation, the work includes the definition of a reproducible benchmark dataset, with explicit criteria for selecting Sentinel-2 scenes, including L2A product type, fixed region, cloud coverage limit, time period, and standardized crop sizes. The evaluation will primarily compare CUDA execution through PolyHok with other CUDA implementations, allowing the analysis of overheads associated with the integration layer. Therefore, the expected contribution is a documented implementation, a reproducible benchmark, and an experimental analysis of the separation between functional coordination in Elixir and dense computation on GPU.
 \end{englishabstract}
 
 %Lista de Figuras
@@ -124,99 +127,221 @@ The main objective is to develop and evaluate an Elixir-CUDA pipeline capable of
 
 \chapter{Introdução}
 
-\section{Uma subseção}
+O processamento de dados estruturados em grade é comum em aplicações que lidam
+com imagens, matrizes e dados multiespectrais. A natureza dessas estruturas favorece
+estratégias de implementação paralelizáveis, especialmente quando uma mesma
+operação deve ser aplicada, de forma independente, a um grande número de posições.
+Nesse tipo de cenário, unidades de processamento gráfico podem ser utilizadas como
+dispositivos de computação massivamente paralela, deslocando para a GPU o núcleo
+numérico mais denso da aplicação.
 
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.
+Ao mesmo tempo, linguagens de alto nível continuam tendo papel importante na
+organização dos fluxos de processamento. Elixir, por exemplo, oferece recursos para
+composição funcional, concorrência e coordenação de tarefas, mas não tem como foco
+principal a execução direta de operações numéricas intensivas sobre grandes matrizes.
+Assim, surge uma separação de responsabilidades relevante para este trabalho:
+Elixir pode coordenar a ingestão, preparação e execução do fluxo, enquanto kernels
+CUDA executam a etapa computacionalmente mais custosa.
 
-\begin{quote}
-  Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-  blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-  Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-  blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla
-  bla~\citet{diDomenico2022,duBoisCavalheiro2025}.
-\end{quote}
-  
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.
+Neste contexto, a biblioteca PolyHok será estudada como mecanismo de integração
+entre Elixir e CUDA. O interesse está em compreender como a execução CUDA via
+PolyHok se comporta em relação a outras implementações CUDA e quais custos são
+introduzidos por essa integração. Em particular, este trabalho busca observar
+como aparecem, no tempo total de execução, componentes como preparação dos dados,
+transferência entre host e dispositivo, chamada via PolyHok, execução do kernel e
+retorno dos resultados. Essa perspectiva aproxima a proposta de estudos voltados à
+avaliação de ferramentas de programação para GPU, nos quais desempenho, esforço
+de implementação e características da ferramenta devem ser analisados de forma
+conjunta~\cite{diDomenico2022,duBoisCavalheiro2025}.
 
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla~\cite{vonNeumann:1966:TSR}.
+O estudo de caso escolhido é o cálculo do Índice de Vegetação por Diferença
+Normalizada, conhecido pela sigla NDVI, sobre imagens Sentinel-2. O NDVI é
+calculado a partir das bandas do vermelho e do infravermelho próximo e, neste
+trabalho, será utilizado como uma carga de trabalho numérica simples, conhecida e
+naturalmente paralelizável. Para cada posição da matriz de entrada, o valor do
+índice pode ser calculado independentemente dos demais pixels, característica que
+torna o problema adequado para avaliar paralelismo em GPU e custos de movimentação
+de dados.
 
-\section{Outra seção}
+O Sentinel-2 fornece imagens multiespectrais da superfície terrestre em diferentes
+faixas do espectro eletromagnético. Para o cálculo de NDVI considerado neste
+trabalho, serão utilizadas as bandas B04, correspondente ao vermelho, e B08,
+correspondente ao infravermelho próximo. A escolha por produtos Sentinel-2 L2A
+reduz a necessidade de incorporar ao estudo uma etapa própria de correção
+atmosférica, mantendo o foco na construção do pipeline, na preparação das entradas e
+na avaliação experimental do cálculo sobre matrizes reais~\cite{copernicusSentinel2Docs2026}.
 
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla~\ref{tabela}.
+\section{Contexto do Trabalho}
 
-\begin{table}
-\caption{Nome da Tabela}\label{tabela2}
-\centering\begin{tabular}{p{4cm}p{5cm}p{6cm}}
+Este trabalho se insere no contexto de integração entre linguagens de alto nível e
+computação acelerada por GPU. A proposta considera Elixir como ambiente de
+coordenação de um pipeline de processamento e CUDA como tecnologia para execução
+do núcleo de computação densa. A ponte entre esses dois níveis será feita por meio do
+PolyHok, biblioteca que permite investigar a construção de kernels GPU a partir do
+ecossistema Elixir.
+
+O caso de uso adotado será o processamento em lote de cenas Sentinel-2 para cálculo
+de NDVI. Embora o domínio dos dados esteja associado ao sensoriamento remoto, o
+foco da monografia é computacional. O trabalho não pretende validar um modelo
+agronômico operacional, calibrar indicadores de safra ou propor uma solução final de
+monitoramento agrícola. O objetivo é utilizar dados reais, públicos e reprodutíveis
+como base para avaliar um pipeline Elixir-CUDA.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  etapa/.style={
+    draw,
+    rounded corners=2pt,
+    align=center,
+    minimum height=0.85cm,
+    text width=4.2cm,
+    fill=white
+  },
+  grupo/.style={
+    draw,
+    rounded corners=4pt,
+    inner sep=0.28cm
+  },
+  titulo/.style={
+    font=\small\bfseries,
+    fill=white,
+    inner sep=2pt
+  },
+  seta/.style={
+    -{Latex[length=2.5mm]},
+    thick
+  },
+  node distance=0.55cm and 1cm
+]
+
+\node[etapa] (cenas) {Cenas Sentinel-2 L2A};
+\node[etapa, below=of cenas] (bandas) {Bandas B04 e B08};
+\node[grupo, fit=(cenas)(bandas)] (dados) {};
+\node[titulo, anchor=west] at ($(dados.north west)+(0.15cm,0)$) {Dados de entrada};
+
+\node[etapa, below=1.25cm of bandas] (preparo) {Preparação dos dados};
+\node[etapa, below=of preparo] (organizacao) {Organização das execuções};
+\node[grupo, fit=(preparo)(organizacao)] (pipeline) {};
+\node[titulo, anchor=west] at ($(pipeline.north west)+(0.15cm,0)$) {Pipeline em Elixir};
+
+\node[etapa, below left=1.25cm and 0.15cm of organizacao] (polyhok) {CUDA via PolyHok};
+\node[etapa, below right=1.25cm and 0.15cm of organizacao] (cuda) {Outras implementações CUDA};
+\node[grupo, fit=(polyhok)(cuda)] (gpu) {};
+\node[titulo, anchor=west] at ($(gpu.north west)+(0.15cm,0)$) {Execução em GPU};
+
+\node[etapa, below=1.25cm of $(polyhok)!0.5!(cuda)$] (registro) {Registro dos resultados};
+\node[etapa, below=of registro] (analise) {Análise comparativa};
+\node[etapa, below=of analise] (metricas) {Tempo, transferências, overhead e throughput};
+\node[grupo, fit=(registro)(analise)(metricas)] (avaliacao) {};
+\node[titulo, anchor=west] at ($(avaliacao.north west)+(0.15cm,0)$) {Avaliação experimental};
+
+\draw[seta] (cenas) -- (bandas);
+\draw[seta] (bandas) -- (preparo);
+\draw[seta] (preparo) -- (organizacao);
+
+\coordinate (saida-pipeline) at ($(organizacao.south)+(0,-0.45cm)$);
+\draw[seta] (organizacao.south) -- (saida-pipeline) -| (polyhok.north);
+\draw[seta] (organizacao.south) -- (saida-pipeline) -| (cuda.north);
+
+\coordinate (entrada-avaliacao) at ($(registro.north)+(0,0.45cm)$);
+\draw[seta] (polyhok.south) |- (entrada-avaliacao) -- (registro.north);
+\draw[seta] (cuda.south) |- (entrada-avaliacao) -- (registro.north);
+\draw[seta] (registro) -- (analise);
+\draw[seta] (analise) -- (metricas);
+
+\end{tikzpicture}
+\caption{Visão geral do pipeline Elixir-CUDA proposto.}
+\label{fig:pipeline-elixir-cuda}
+\end{figure}
+
+\section{Histórico e Justificativa}
+
+A proposta parte da observação de que aplicações sobre imagens e grades
+bidimensionais frequentemente apresentam grande quantidade de operações
+independentes. Esse padrão favorece o uso de GPUs, mas a adoção de aceleração
+também introduz decisões de engenharia que precisam ser medidas. Em muitos casos,
+o ganho obtido pelo kernel pode ser afetado por custos externos ao cálculo em si,
+como conversão de dados, transferência de memória e chamadas entre camadas de
+software.
+
+No caso deste trabalho, essa questão é estudada a partir do PolyHok. A biblioteca
+oferece uma forma de aproximar Elixir e CUDA, permitindo que a linguagem seja usada
+na coordenação do fluxo sem abandonar a possibilidade de executar o trecho mais
+intensivo na GPU. A justificativa acadêmica está, portanto, na análise dessa
+separação entre coordenação funcional e computação densa, bem como na avaliação
+dos overheads introduzidos pela camada de integração.
+
+O uso do NDVI e de imagens Sentinel-2 contribui para tornar o estudo menos
+artificial. Em vez de avaliar apenas um kernel sintético, o trabalho utiliza uma
+operação simples, mas aplicada a dados reais e com critérios explícitos de seleção.
+Isso permite discutir reprodutibilidade, preparação de dados, definição de benchmark
+e comparação entre implementações. Dessa forma, a contribuição esperada não se
+limita ao cálculo do índice, mas inclui a documentação de um conjunto de entradas e
+de um procedimento experimental.
+
+\section{Delimitação do Estudo}
+
+O escopo do trabalho será delimitado para preservar o foco na avaliação
+computacional do pipeline. A entrada principal será composta por produtos
+Sentinel-2 L2A, utilizando as bandas B04 e B08, mantendo o núcleo do benchmark
+centrado no cálculo de NDVI.
+
+A comparação experimental terá como foco uma implementação CUDA acionada via
+PolyHok e outras implementações CUDA, incluindo CUDA C/C++ direta. Essa comparação
+permitirá diferenciar o custo associado à camada de integração dos demais custos da
+execução em GPU. As versões comparadas deverão executar a mesma operação, sobre os
+mesmos dados de entrada, com a mesma representação numérica e a mesma política para
+casos como denominador zero.
+
+\begin{table}[H]
+\caption{Delimitação inicial do estudo de caso}\label{tab:delimitacao-estudo}
+\centering\begin{tabular}{p{4cm}p{10cm}}
 \hline
-Blabla & Blabla & Blablabla\\
+Elemento & Delimitação prevista\\
 \hline
-{\small Bla} & {\small Blabla} & {\small\em Bla blabla blablabla blabla
-  blablabla blabla blablabla.}\\
-{\small Bla} & {\small Blabla} & {\small\em Bla blabla blablabla blabla
-  blablabla blabla blablabla.}\\
-{\small Bla} & {\small Blabla} & {\small\em Bla blabla blablabla blabla
-  blablabla blabla blablabla.}\\
-{\small Bla} & {\small Blabla} & {\small\em Bla blabla blablabla blabla
-  blablabla blabla blablabla.}\\
-{\small Bla} & {\small Blabla} & {\small\em Bla blabla blablabla blabla
-  blablabla blabla blablabla.}\\
-{\small Bla} & {\small Blabla} & {\small\em Bla blabla blablabla blabla
-  blablabla blabla blablabla. Conforme a figura~\ref{figura}}\\
+{\small Dados de entrada} & {\small Produtos Sentinel-2 L2A, com uso das bandas B04 e B08 para o cálculo de NDVI.}\\
+{\small Operação avaliada} & {\small Cálculo ponto a ponto de NDVI sobre matrizes bidimensionais.}\\
+{\small Coordenação} & {\small Pipeline organizado em Elixir, incluindo preparação, execução em lote e coleta de métricas.}\\
+{\small Computação densa} & {\small Kernel CUDA acionado via PolyHok, com comparação em relação a outras implementações CUDA, incluindo CUDA C/C++ direta.}\\
+{\small Métricas} & {\small Tempos de preparação, transferências host-GPU, execução do kernel, retorno dos dados, overhead de chamada, tempo total, throughput e diferença relativa de desempenho.}\\
+{\small Fora do escopo} & {\small Validação agronômica operacional, calibração de safra ou construção de sistema final de monitoramento agrícola.}\\
 \hline
 \end{tabular}
 \begin{flushleft}
-{\small Fonte: Elaborada pelo autor.}    
+{\small Fonte: Elaborada pelo autor.}
 \end{flushleft}
 \end{table}
 
+\section{Objetivos}
 
-\subsection{Uma subseção}
+O objetivo principal deste trabalho é desenvolver e avaliar um pipeline de
+processamento em Elixir para cálculo de NDVI em cenas Sentinel-2, utilizando kernels
+CUDA via PolyHok, um dataset benchmark reprodutível e métricas voltadas à análise
+dos overheads da integração com GPU.
 
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.
+Para alcançar esse objetivo, foram definidos os seguintes objetivos específicos:
+
+\begin{itemize}
+  \item Estudar Elixir/BEAM, GPGPU, CUDA, PolyHok e processamento de dados multiespectrais.
+  \item Definir critérios reprodutíveis de seleção de cenas Sentinel-2 para cálculo de NDVI.
+  \item Construir e documentar um dataset benchmark com cenas Sentinel-2 adequadas ao experimento.
+  \item Preparar as bandas B04 e B08 para execução do cálculo de NDVI.
+  \item Implementar o núcleo de cálculo em CUDA via PolyHok.
+  \item Implementar outras versões CUDA de referência com a mesma lógica numérica usada na versão via PolyHok.
+  \item Comparar a implementação via PolyHok com outras implementações CUDA, incluindo CUDA C/C++ direta.
+  \item Medir overheads de preparação dos dados, transferências, chamada via PolyHok, execução do kernel e retorno dos resultados.
+  \item Analisar os resultados em termos de tempo de execução, throughput, diferença relativa de desempenho, overheads e limitações encontradas.
+\end{itemize}
 
 \chapter{Metodologia}
 
 A metodologia deste trabalho será organizada como um estudo de caso experimental. Inicialmente, será realizado um levantamento bibliográfico sobre Elixir/BEAM, computação em GPU, CUDA, PolyHok, integração entre linguagens de alto nível e kernels acelerados, benchmarks reprodutíveis e processamento de dados multiespectrais. Também será feito o estudo dirigido da ferramenta PolyHok, incluindo documentação, repositório e exemplos disponíveis.
 
-Em seguida, será definido o dataset benchmark de cenas Sentinel-2 para o cálculo de NDVI. A fonte principal de dados será Sentinel-2 L2A, com uso das bandas B04, correspondente ao vermelho, e B08, correspondente ao infravermelho próximo. A banda SCL poderá ser utilizada para apoiar a identificação de nuvens, sombras ou pixels inválidos.
+Em seguida, será definido o dataset benchmark de cenas Sentinel-2 para o cálculo de NDVI. A fonte principal de dados será Sentinel-2 L2A, com uso das bandas B04, correspondente ao vermelho, e B08, correspondente ao infravermelho próximo.
 
-A seleção das cenas seguirá critérios explícitos, incluindo produto Sentinel-2 L2A, presença das bandas B04 e B08, disponibilidade da banda SCL quando utilizada, limite máximo de cobertura de nuvens, tile ou região fixa, conjunto de datas selecionadas, resolução espacial e tamanho dos recortes processados. Os IDs dos produtos, metadados relevantes, critérios de exclusão e procedimento de preparação serão registrados para permitir reprodução dos experimentos. A pré-seleção poderá ser automatizada por consulta a catálogo ou API, mas a inclusão final das cenas exigirá verificação da presença das bandas necessárias, da cobertura de nuvens e da consistência entre os dados.
+A seleção das cenas seguirá critérios explícitos, incluindo produto Sentinel-2 L2A, presença das bandas B04 e B08, limite máximo de cobertura de nuvens, tile ou região fixa, conjunto de datas selecionadas, resolução espacial e tamanho dos recortes processados. Os IDs dos produtos, metadados relevantes, critérios de exclusão e procedimento de preparação serão registrados para permitir reprodução dos experimentos. A pré-seleção poderá ser automatizada por consulta a catálogo ou API, mas a inclusão final das cenas exigirá verificação da presença das bandas necessárias, da cobertura de nuvens e da consistência entre os dados.
 
 O fluxo de processamento previsto inclui as seguintes etapas:
 
@@ -225,18 +350,17 @@ O fluxo de processamento previsto inclui as seguintes etapas:
     \item Pré-seleção e verificação das cenas, bandas e metadados.
     \item Construção e documentação do dataset benchmark de NDVI.
     \item Preparação dos dados de entrada, garantindo compatibilidade entre as bandas utilizadas.
-    \item Implementação da linha de base em CPU.
     \item Implementação do núcleo de cálculo em CUDA via PolyHok.
-    \item Implementação, quando viável, de uma alternativa GPU semelhante para comparação.
+    \item Implementação de outras versões CUDA de referência para comparação.
     \item Coordenação do fluxo de dados em Elixir.
     \item Execução dos experimentos em lote.
     \item Coleta separada de métricas de desempenho e overhead.
     \item Análise dos resultados e discussão das limitações.
 \end{enumerate}
 
-O benchmark será centrado no cálculo de NDVI e na análise dos custos associados ao uso da GPU. Caso haja pré-processamento geoespacial externo, como conversão de formatos ou recorte de área, essa etapa será documentada e, quando pertinente, medida separadamente, mas não será confundida com o tempo do núcleo computacional. Serão coletadas métricas como tempo de preparação dos dados, transferência host-GPU, execução do kernel, retorno dos dados, overhead de chamada via PolyHok, tempo total do fluxo, throughput e speedup em relação à linha de base em CPU. A comparação CPU versus GPU será mantida como referência, mas a análise principal buscará explicar os overheads introduzidos pela integração com GPU e, se viável, contrastar PolyHok com uma alternativa GPU semelhante.
+O benchmark será centrado no cálculo de NDVI e na análise dos custos associados ao uso da GPU. Caso haja pré-processamento geoespacial externo, como conversão de formatos ou recorte de área, essa etapa será documentada e, quando pertinente, medida separadamente, mas não será confundida com o tempo do núcleo computacional. Serão coletadas métricas como tempo de preparação dos dados, transferência host-GPU, execução do kernel, retorno dos dados, overhead de chamada via PolyHok, tempo total do fluxo e throughput. A análise principal buscará explicar os overheads introduzidos pela integração com GPU e contrastar a implementação via PolyHok com outras implementações CUDA.
 
-Para garantir a robustez da avaliação, a metodologia incluirá uma etapa de validação detalhada dos resultados. Isso envolverá o uso de métodos estatísticos para confirmar a correção dos dados obtidos e a medição do ganho de desempenho em relação a um baseline claramente definido, com a indicação do nível de confiança dos resultados. Além disso, será dada atenção especial para que todo o experimento seja reprodutível, dada a proposta de construção de um benchmark documentado.
+Para garantir a robustez da avaliação, a metodologia incluirá uma etapa de validação detalhada dos resultados. Isso envolverá o uso de métodos estatísticos para confirmar a correção dos dados obtidos e a medição das diferenças de desempenho entre as implementações CUDA avaliadas, com a indicação do nível de confiança dos resultados. Além disso, será dada atenção especial para que todo o experimento seja reprodutível, dada a proposta de construção de um benchmark documentado.
 
 Como saída complementar, poderão ser gerados agregados simples, como média do tile e histogramas, além de imagens PNG para visualização dos resultados. Esses produtos terão função de inspeção e apresentação do estudo de caso, sem caracterizar uma aplicação agronômica operacional.
 
@@ -294,7 +418,7 @@ O estudo de caso utilizará produtos Sentinel-2 L2A e terá como dados de entrad
 
 O pipeline será organizado em etapas separadas. Primeiro, os dados Sentinel-2 serão selecionados e preparados em uma representação numérica compatível com as implementações avaliadas. Em seguida, a etapa de coordenação será implementada em Elixir, responsável por organizar entradas, acionar as execuções, registrar parâmetros e coletar resultados. O núcleo computacional será implementado em CUDA e acionado por meio do PolyHok.
 
-A comparação com CUDA C/C++ direta será obrigatória. Essa comparação é essencial porque o objetivo do trabalho não é apenas demonstrar que a GPU acelera o cálculo de NDVI, mas analisar o custo da camada de integração oferecida pelo PolyHok em relação a uma implementação GPU mais direta. Assim, o estudo deverá comparar pelo menos duas versões aceleradas: uma implementação CUDA via PolyHok, coordenada a partir de Elixir, e uma implementação CUDA C/C++ direta, usada como referência GPU. As duas versões deverão executar a mesma operação, sobre os mesmos dados de entrada, com a mesma representação numérica e a mesma política para denominador zero.
+A comparação com outras implementações CUDA será obrigatória. Essa comparação é essencial porque o objetivo do trabalho é analisar o custo da camada de integração oferecida pelo PolyHok em relação a implementações CUDA mais diretas. Assim, o estudo deverá comparar pelo menos duas versões aceleradas: uma implementação CUDA via PolyHok, coordenada a partir de Elixir, e uma implementação CUDA C/C++ direta, usada como referência GPU. As versões comparadas deverão executar a mesma operação, sobre os mesmos dados de entrada, com a mesma representação numérica e a mesma política para denominador zero.
 
 As métricas principais serão voltadas à decomposição dos tempos de execução e dos overheads. Para isso, serão medidas as seguintes informações:
 
@@ -308,9 +432,9 @@ As métricas principais serão voltadas à decomposição dos tempos de execuç�
   \item Overhead associado à chamada via PolyHok, medido separadamente quando possível ou estimado a partir da diferença entre os componentes observáveis da execução.
 \end{itemize}
 
-O interesse principal será comparar a implementação via PolyHok com a implementação CUDA C/C++ direta, buscando observar quanto da execução total corresponde ao cálculo efetivo e quanto corresponde aos custos de integração, preparação e movimentação de dados.
+O interesse principal será comparar a implementação via PolyHok com outras implementações CUDA, buscando observar quanto da execução total corresponde ao cálculo efetivo e quanto corresponde aos custos de integração, preparação e movimentação de dados.
 
-Portanto, o estudo de caso fica delimitado por três fronteiras principais. A primeira é a fronteira dos dados: serão usadas cenas Sentinel-2 L2A e apenas as bandas B04 e B08. A segunda é a fronteira computacional: será estudado o cálculo de NDVI como operação ponto a ponto sobre matrizes bidimensionais. A terceira é a fronteira experimental: a comparação obrigatória será entre PolyHok e CUDA C/C++ direta, com foco em overheads de integração e execução em GPU, e não na construção de uma aplicação agronômica operacional.
+Portanto, o estudo de caso fica delimitado por três fronteiras principais. A primeira é a fronteira dos dados: serão usadas cenas Sentinel-2 L2A e apenas as bandas B04 e B08. A segunda é a fronteira computacional: será estudado o cálculo de NDVI como operação ponto a ponto sobre matrizes bidimensionais. A terceira é a fronteira experimental: a comparação obrigatória será entre PolyHok e outras implementações CUDA, com foco em overheads de integração e execução em GPU, e não na construção de uma aplicação agronômica operacional.
 
 \section{Definição dos critérios do dataset benchmark}
 
@@ -318,7 +442,7 @@ O dataset benchmark será definido como uma coleção controlada e documentada d
 
 O primeiro critério será o tipo de produto. Serão usados produtos Sentinel-2 L2A, pois eles fornecem reflectância de superfície e reduzem a necessidade de correções atmosféricas adicionais \cite{copernicusSentinel2Docs2026}. Essa decisão evita que o benchmark dependa de uma etapa externa complexa de correção radiométrica e torna mais simples comparar as implementações do cálculo de NDVI. Produtos L1C não serão usados no benchmark principal, para evitar misturar imagens de reflectância no topo da atmosfera com imagens de reflectância de superfície.
 
-O segundo critério será a disponibilidade das bandas B04 e B08. Essas duas bandas são obrigatórias porque correspondem às entradas necessárias para o cálculo de NDVI: B04 representa a faixa do vermelho e B08 representa o infravermelho próximo. Ambas possuem resolução espacial de 10 m nos produtos Sentinel-2, o que simplifica o alinhamento das matrizes e evita a necessidade de reamostragem entre as bandas principais. Essa escolha mantém o benchmark centrado no mesmo núcleo numérico que será comparado nas implementações PolyHok e CUDA C/C++ direta.
+O segundo critério será a disponibilidade das bandas B04 e B08. Essas duas bandas são obrigatórias porque correspondem às entradas necessárias para o cálculo de NDVI: B04 representa a faixa do vermelho e B08 representa o infravermelho próximo. Ambas possuem resolução espacial de 10 m nos produtos Sentinel-2, o que simplifica o alinhamento das matrizes e evita a necessidade de reamostragem entre as bandas principais. Essa escolha mantém o benchmark centrado no mesmo núcleo numérico que será comparado nas implementações PolyHok e demais versões CUDA.
 
 O terceiro critério será a delimitação espacial. A região escolhida para o benchmark será o entorno de Pelotas, no sul do Rio Grande do Sul, incluindo áreas agrícolas e áreas próximas à Lagoa dos Patos. Essa região é adequada por três razões. Primeiro, possui relevância local para o trabalho, pois está associada ao contexto geográfico da Universidade Federal de Pelotas. Segundo, combina áreas vegetadas, áreas agrícolas, áreas urbanas e corpos d'água, produzindo uma variedade de valores de NDVI sem exigir que o trabalho assuma um objetivo agronômico específico. Terceiro, a presença de grandes superfícies relativamente contínuas facilita a extração de recortes padronizados para benchmark.
 
@@ -351,7 +475,7 @@ A definição final do dataset benchmark, portanto, seguirá os seguintes crité
   \item Documentação individual de cada entrada do dataset.
 \end{itemize}
 
-Esses critérios estabelecem um conjunto de dados adequado para avaliar o pipeline proposto, mantendo o foco na reprodutibilidade e na comparação entre PolyHok e CUDA C/C++ direta.
+Esses critérios estabelecem um conjunto de dados adequado para avaliar o pipeline proposto, mantendo o foco na reprodutibilidade e na comparação entre PolyHok e outras implementações CUDA.
 
 
 \chapter{Conclusão}
