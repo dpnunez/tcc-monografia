@@ -335,6 +335,177 @@ Para alcançar esse objetivo, foram definidos os seguintes objetivos específico
   \item Analisar os resultados em termos de tempo de execução, throughput, diferença relativa de desempenho, overheads e limitações encontradas.
 \end{itemize}
 
+\chapter{Fundamentação Teórica}
+
+Este capítulo apresenta os conceitos que formam a base teórica deste trabalho. As
+seções a seguir abordam a linguagem Elixir e sua máquina virtual, a computação
+paralela em GPU, o modelo de programação CUDA, a biblioteca PolyHok, o uso de
+imagens Sentinel-2 para cálculo de NDVI e os princípios de construção de benchmarks
+reprodutíveis. Esses tópicos são necessários para compreender a separação proposta
+entre coordenação do fluxo de dados em Elixir e execução do núcleo computacional
+em GPU.
+
+\section{Elixir, BEAM e Coordenação de Fluxos}
+
+Elixir é uma linguagem de programação funcional executada sobre a máquina virtual
+BEAM, a mesma base de execução do ecossistema Erlang/OTP. A linguagem oferece
+recursos voltados à composição de funções, imutabilidade de dados, criação de
+processos leves e comunicação por troca de mensagens~\cite{elixirDocs2026,
+erlangOtpDocs2026}. Essas características tornam Elixir adequado para organizar
+fluxos de processamento, coordenar tarefas concorrentes e estruturar aplicações que
+dependem de etapas bem definidas.
+
+No contexto deste trabalho, Elixir não será tratado como ferramenta principal para
+computação numérica intensiva. Sua função será coordenar o pipeline: organizar os
+dados de entrada, acionar as etapas de processamento, registrar parâmetros de
+execução, executar chamadas para o código acelerado e coletar métricas. Essa
+delimitação é importante porque separa a lógica de orquestração, escrita em uma
+linguagem de alto nível, do trecho computacionalmente mais denso, executado por
+kernels CUDA.
+
+Essa separação de responsabilidades é coerente com o objetivo do projeto. O fluxo
+em Elixir deve oferecer clareza de organização e reprodutibilidade experimental,
+enquanto a GPU deve ser utilizada para executar a operação ponto a ponto sobre
+matrizes de imagem. Assim, o interesse não está apenas no tempo de execução do
+kernel, mas também nos custos introduzidos pela comunicação entre essas camadas.
+
+\section{Computação Paralela em GPU}
+
+Unidades de processamento gráfico, ou GPUs, são dispositivos projetados para
+executar grande quantidade de operações em paralelo. Embora tenham origem no
+processamento gráfico, GPUs passaram a ser utilizadas também em aplicações de
+propósito geral, especialmente quando o problema pode ser dividido em muitas
+operações semelhantes e independentes. Esse modelo é conhecido como GPGPU,
+\textit{General-Purpose computing on Graphics Processing Units}.
+
+O processamento de imagens e matrizes é um exemplo típico desse tipo de carga de
+trabalho. Em muitos casos, a mesma operação é aplicada a cada elemento de uma
+grade bidimensional, e o resultado de um pixel não depende diretamente dos demais.
+Essa característica permite distribuir o trabalho entre muitos threads de execução,
+aproveitando a capacidade de paralelismo massivo da GPU.
+
+Entretanto, o uso de GPU não elimina todos os custos de execução. Antes do cálculo,
+os dados precisam ser preparados em uma representação adequada e transferidos da
+memória do host para a memória do dispositivo. Depois da execução, os resultados
+precisam retornar ao host. Em aplicações nas quais o kernel é simples, esses custos
+externos podem representar parcela significativa do tempo total. Por isso, a avaliação
+deste trabalho considera não apenas o tempo do kernel, mas também preparação,
+transferências, chamada via PolyHok, retorno dos resultados e throughput.
+
+\section{CUDA}
+
+CUDA é uma plataforma de programação paralela da NVIDIA que permite implementar
+kernels executados em GPUs compatíveis. No modelo CUDA, o programador define uma
+função a ser executada no dispositivo, organiza os threads em blocos e grades, e
+controla a movimentação de dados entre a memória da CPU e a memória da GPU
+quando necessário~\cite{nvidiaCudaGuide2026}.
+
+Para o estudo de caso deste trabalho, CUDA é relevante por oferecer o mecanismo de
+execução do núcleo numérico do cálculo de NDVI. A operação avaliada é simples:
+para cada posição das matrizes de entrada, calcula-se um valor de saída a partir das
+bandas B04 e B08. Essa estrutura se ajusta bem ao modelo de execução por muitos
+threads independentes, pois cada thread pode ficar responsável por uma ou mais
+posições da imagem.
+
+Além da versão acionada por PolyHok, o trabalho prevê comparação com outras
+implementações CUDA, incluindo CUDA C/C++ direta. Essa comparação é necessária
+para diferenciar custos próprios da execução em GPU dos custos introduzidos pela
+camada de integração. Para que essa análise seja válida, as implementações deverão
+usar os mesmos dados, a mesma fórmula, a mesma representação numérica e a mesma
+política para casos de denominador zero.
+
+\section{PolyHok}
+
+PolyHok é a biblioteca estudada neste trabalho como mecanismo de integração entre
+Elixir e CUDA. A proposta da biblioteca está relacionada ao desenvolvimento de
+kernels GPU de alta ordem no ecossistema Elixir, permitindo aproximar abstrações da
+linguagem de uma execução paralela em GPU~\cite{duBoisCavalheiro2025}. Na
+proposta deste TCC, PolyHok atua como ponte entre o pipeline coordenado em Elixir e
+o núcleo computacional executado em CUDA.
+
+A adoção do PolyHok torna possível investigar uma questão central para o trabalho:
+qual é o custo de utilizar uma camada de integração de alto nível para acionar
+computação densa em GPU? Essa pergunta não pode ser respondida apenas medindo o
+tempo final do programa. É necessário decompor o fluxo em partes observáveis, como
+preparação dos dados, transferência para o dispositivo, execução do kernel,
+transferência de retorno e overhead de chamada.
+
+O papel do PolyHok, portanto, não será avaliado apenas pela existência de ganho em
+relação a uma execução sequencial. O foco será observar como a integração se
+comporta diante de entradas reais e tamanhos padronizados de recorte, comparando a
+execução via PolyHok com alternativas CUDA mais diretas sempre que viável.
+
+\section{Sentinel-2 e NDVI}
+
+Sentinel-2 é uma missão de observação da Terra que fornece imagens
+multiespectrais da superfície terrestre. Seus produtos permitem observar diferentes
+faixas do espectro eletromagnético e são adequados para estudos que envolvem
+vegetação, água, solo e cobertura da superfície~\cite{copernicusSentinel2Docs2026}.
+Neste trabalho, as imagens Sentinel-2 serão utilizadas como fonte de dados reais
+para avaliação de desempenho, e não como base para validação agronômica
+operacional.
+
+O índice utilizado no estudo de caso será o NDVI, \textit{Normalized Difference
+Vegetation Index}. Esse índice é calculado a partir de uma banda do vermelho e uma
+banda do infravermelho próximo, sendo frequentemente usado como indicador de
+vegetação~\cite{usgsNdvi2026}. No caso do Sentinel-2, a proposta deste trabalho
+utiliza a banda B04, correspondente ao vermelho, e a banda B08, correspondente ao
+infravermelho próximo.
+
+O cálculo considerado é apresentado pela Equação~\ref{eq:ndvi}.
+
+\begin{equation}
+NDVI = \frac{B08 - B04}{B08 + B04}
+\label{eq:ndvi}
+\end{equation}
+
+Do ponto de vista computacional, o NDVI é adequado para este trabalho porque pode
+ser calculado ponto a ponto. Cada posição da matriz de saída depende apenas dos
+valores correspondentes nas matrizes das bandas B04 e B08. Essa independência
+favorece o paralelismo em GPU e permite construir um benchmark simples, controlado
+e reprodutível sobre dados reais.
+
+% TODO: inserir figura com exemplo de cena Sentinel-2, bandas B04/B08 e resultado NDVI.
+
+\section{Benchmarks Reprodutíveis e Métricas de Avaliação}
+
+Um benchmark reprodutível exige que os dados, critérios de seleção, ambiente,
+parâmetros de execução e métricas sejam documentados. No caso deste trabalho, a
+coleção de entradas será formada por cenas Sentinel-2 L2A selecionadas segundo
+critérios explícitos, incluindo região fixa, limite de cobertura de nuvens, período
+temporal, presença das bandas necessárias e tamanhos padronizados de recorte.
+
+A avaliação será orientada por métricas que permitam observar o comportamento do
+pipeline como um todo. A Tabela~\ref{tab:fundamentacao-metricas} resume os
+principais componentes que deverão ser considerados na análise experimental.
+
+\begin{table}[H]
+\caption{Componentes previstos para a avaliação experimental}\label{tab:fundamentacao-metricas}
+\centering\begin{tabular}{p{4.6cm}p{9.4cm}}
+\hline
+Componente & Papel na avaliação\\
+\hline
+{\small Preparação dos dados} & {\small Tempo necessário para organizar as bandas B04 e B08 na representação usada pelas implementações.}\\
+{\small Transferência \mbox{host-GPU}} & {\small Custo de envio dos dados de entrada da memória do host para a memória do dispositivo.}\\
+{\small Execução do kernel} & {\small Tempo gasto no cálculo paralelo de NDVI na GPU.}\\
+{\small Retorno dos resultados} & {\small Custo de transferência da matriz resultante da GPU para o host.}\\
+{\small Chamada via PolyHok} & {\small Overhead associado à integração entre Elixir, PolyHok e CUDA, quando puder ser medido ou estimado separadamente.}\\
+{\small Throughput} & {\small Volume de dados ou quantidade de pixels processados por unidade de tempo.}\\
+\hline
+\end{tabular}
+\begin{flushleft}
+{\small Fonte: Elaborada pelo autor.}
+\end{flushleft}
+\end{table}
+
+Essa decomposição é necessária porque o objetivo do trabalho não é apenas verificar
+se a GPU é mais rápida em determinado cenário, mas compreender quais partes do
+pipeline influenciam o resultado final. Em especial, entradas menores podem tornar
+mais visíveis os custos fixos de integração, enquanto entradas maiores tendem a
+evidenciar melhor o throughput do kernel e o custo das transferências. Dessa forma,
+a fundamentação teórica conduz diretamente à metodologia experimental adotada na
+monografia.
+
 \chapter{Metodologia}
 
 A metodologia deste trabalho será organizada como um estudo de caso experimental. Inicialmente, será realizado um levantamento bibliográfico sobre Elixir/BEAM, computação em GPU, CUDA, PolyHok, integração entre linguagens de alto nível e kernels acelerados, benchmarks reprodutíveis e processamento de dados multiespectrais. Também será feito o estudo dirigido da ferramenta PolyHok, incluindo documentação, repositório e exemplos disponíveis.
