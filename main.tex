@@ -477,7 +477,28 @@ valores correspondentes nas matrizes das bandas B04 e B08. Essa independência
 favorece o paralelismo em GPU e permite construir um benchmark simples, controlado
 e reprodutível sobre dados reais.
 
-% TODO: inserir figura com exemplo de cena Sentinel-2, bandas B04/B08 e resultado NDVI.
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagens/sentinel2_B04_vermelho.png}
+    {\small (a) Banda B04}
+\end{minipage}
+\hfill
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagens/sentinel2_B08_nir.png}
+    {\small (b) Banda B08}
+\end{minipage}
+\hfill
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagens/sentinel2_NDVI_color.png}
+    {\small (c) NDVI calculado}
+\end{minipage}
+\caption[Exemplo de tile Sentinel-2 com bandas B04, B08 e NDVI sobre Pelotas e região.]{Exemplo de tile catalogado pelo Sentinel-2 sobre Pelotas e região, com visualização das bandas B04 e B08 e do resultado do NDVI. As imagens das bandas foram geradas a partir dos arquivos \texttt{JP2} do produto Sentinel-2 L2A, com redução espacial para visualização e realce linear por percentis 2--98 para conversão para \texttt{PNG} em 8 bits; esse realce altera apenas a visualização, não os valores usados no cálculo. O NDVI foi calculado ponto a ponto pela Equação~\ref{eq:ndvi}, usando os valores numéricos das bandas B04 e B08, e depois colorizado para apresentação visual.}
+\label{fig:sentinel2-b04-b08-ndvi}
+\end{figure}
 
 \section{Benchmarks Reprodutíveis e Métricas de Avaliação}
 
@@ -674,7 +695,12 @@ O segundo critério será a disponibilidade das bandas B04 e B08. Essas duas ban
 
 O terceiro critério será a delimitação espacial. A região escolhida para o benchmark será o entorno de Pelotas, no sul do Rio Grande do Sul, incluindo áreas agrícolas e áreas próximas à Lagoa dos Patos. Essa região é adequada por três razões. Primeiro, possui relevância local para o trabalho, pois está associada ao contexto geográfico da Universidade Federal de Pelotas. Segundo, combina áreas vegetadas, áreas agrícolas, áreas urbanas e corpos d'água, produzindo uma variedade de valores de NDVI sem exigir que o trabalho assuma um objetivo agronômico específico. Terceiro, a presença de grandes superfícies relativamente contínuas facilita a extração de recortes padronizados para benchmark.
 
-% TODO: inserir imagem do recorte do mapa.
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{imagens/tile_sentinel2_pelotas.png}
+\caption{Exemplo de tile Sentinel-2 usado para delimitação espacial sobre Pelotas e região.}
+\label{fig:tile-sentinel2-pelotas}
+\end{figure}
 
 Para tornar essa delimitação reprodutível, o benchmark deverá registrar uma área geográfica fixa. Essa área será apresentada visualmente na monografia por meio de uma imagem ou mapa do recorte considerado, acompanhada das coordenadas ou do identificador espacial usado na coleta das cenas. Caso a consulta ao catálogo Sentinel-2 indique problemas de disponibilidade ou cobertura excessiva de água, a área poderá ser ajustada uma única vez antes da consolidação do dataset, mas a versão final deverá permanecer fixa para todos os experimentos.
 
@@ -706,27 +732,27 @@ A definição final do dataset benchmark, portanto, seguirá os seguintes crité
 Esses critérios estabelecem um conjunto de dados adequado para avaliar o pipeline proposto, mantendo o foco na reprodutibilidade e na comparação entre PolyHok e outras implementações CUDA.
 
 
-\chapter{Conclusão}
+% \chapter{Conclusão}
 
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.
 
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.
 
 % Bibliografia http://liinwww.ira.uka.de/bibliography/index.html um
 % site que cataloga no formato bibtex a bibliografia em computacao
@@ -737,53 +763,53 @@ Bla blabla blablabla bla.
 \bibliography{bibliografia} 
 
 % Apêndices (Opcional) - Material produzido pelo autor
-\apendices
-\chapter{Um Apêndice}
+% \apendices
+% \chapter{Um Apêndice}
 
 % Anexos (Opcional) - Material produzido por outro
-\anexos
-\chapter{Um Anexo}
+% \anexos
+% \chapter{Um Anexo}
 
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.
 
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.
 
-\chapter{Outro Anexo}
+% \chapter{Outro Anexo}
 
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.
 
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
-blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
-Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
+% blablabla bla.  Bla blabla blablabla bla.  Bla blabla blablabla bla.
+% Bla blabla blablabla bla.
 
 \end{document}
