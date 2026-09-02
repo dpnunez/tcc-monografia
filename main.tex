@@ -119,19 +119,29 @@ The main objective is to develop and evaluate an Elixir-CUDA pipeline capable of
         \item[B04] Banda 04 do Sentinel-2
         \item[B08] Banda 08 do Sentinel-2
         \item[BEAM] Bogdan/Björn's Erlang Abstract Machine
+        \item[BOA] Bottom of Atmosphere
         \item[CPU] Central Processing Unit
+        \item[CRS] Coordinate Reference System
         \item[CUDA] Compute Unified Device Architecture
+        \item[DN] Digital Number
         \item[GPGPU] General-Purpose computing on Graphics Processing Units
         \item[GPU] Graphics Processing Unit
         \item[ID] Identificador
+        \item[IPC] Inter-Process Communication
+        \item[JP2] JPEG 2000
+        \item[JSON] JavaScript Object Notation
         \item[L1C] Level-1C
         \item[L2A] Level-2A
         \item[NDVI] Normalized Difference Vegetation Index
         \item[OFG-STM] Obstruction-Free GPU Software Transactional Memory
         \item[OTP] Open Telecom Platform
         \item[PNG] Portable Network Graphics
+        \item[SAFE] Standard Archive Format for Europe
+        \item[SHA-256] Secure Hash Algorithm de 256 bits
         \item[TCC] Trabalho de Conclusão de Curso
+        \item[UTM] Universal Transverse Mercator
         \item[WSL] Windows Subsystem for Linux
+        \item[XML] Extensible Markup Language
 \end{listofabbrv}
 
 %Sumario
@@ -710,7 +720,7 @@ O benchmark adotará, inicialmente, cobertura de nuvens máxima de 20\% conforme
 
 O quinto critério será o período temporal. O dataset usará cenas adquiridas entre janeiro de 2024 e dezembro de 2025. Esse intervalo é recente, amplo o suficiente para oferecer várias aquisições Sentinel-2 sobre a região escolhida e anterior ao período principal de escrita final do TCC. A seleção deverá buscar cenas distribuídas ao longo do ano, preferencialmente cobrindo diferentes estações, mas sem transformar o estudo em uma análise temporal de vegetação. O objetivo da distribuição temporal é apenas evitar que o benchmark dependa de uma única condição de cena.
 
-O sexto critério será o tamanho dos recortes processados. Para avaliar o comportamento do pipeline em diferentes escalas, serão definidos três tamanhos padronizados: \texttt{1024 x 1024}, \texttt{2048 x 2048} e \texttt{4096 x 4096} pixels. Esses tamanhos permitem observar como os custos fixos de integração e transferência se comportam diante de volumes crescentes de dados. Recortes pequenos tendem a evidenciar overheads fixos, enquanto recortes maiores tendem a dar mais peso ao throughput do kernel e à largura de banda de transferência. A escolha por potências de dois também facilita a organização dos experimentos e a comparação entre execuções.
+O sexto critério será o tamanho dos recortes processados. Para avaliar o comportamento do pipeline em diferentes escalas, foram definidos três tamanhos padronizados: \texttt{1024 x 1024}, \texttt{4096 x 4096} e \texttt{8192 x 8192} pixels. Esses tamanhos permitem observar como os custos fixos de integração e transferência se comportam diante de volumes crescentes de dados. Recortes pequenos tendem a evidenciar overheads fixos, enquanto recortes maiores tendem a dar mais peso ao throughput do kernel e à largura de banda de transferência. A escolha por potências de dois também facilita a organização dos experimentos e a comparação entre execuções.
 
 O sétimo critério será o formato preparado dos dados. Os produtos Sentinel-2 originais ou seus identificadores deverão ser preservados para fins de rastreabilidade, mas os experimentos poderão utilizar uma representação intermediária mais simples para facilitar a leitura das entradas e a execução repetida dos testes. Essa representação deverá manter as bandas B04 e B08 em uma forma numérica compatível com as implementações avaliadas, evitando que o tempo de leitura de formatos geoespaciais complexos seja confundido com o tempo do núcleo computacional. O formato final será definido durante a preparação do benchmark e documentado junto com os comandos ou scripts de conversão utilizados.
 
@@ -724,13 +734,217 @@ A definição final do dataset benchmark, portanto, seguirá os seguintes crité
   \item Região fixa no entorno de Pelotas.
   \item Cobertura de nuvens máxima de 20\%.
   \item Período entre janeiro de 2024 e dezembro de 2025.
-  \item Recortes padronizados de \texttt{1024 x 1024}, \texttt{2048 x 2048} e \texttt{4096 x 4096} pixels.
+  \item Recortes padronizados de \texttt{1024 x 1024}, \texttt{4096 x 4096} e \texttt{8192 x 8192} pixels.
   \item Representação intermediária documentada para os experimentos.
   \item Documentação individual de cada entrada do dataset.
 \end{itemize}
 
 Esses critérios estabelecem um conjunto de dados adequado para avaliar o pipeline proposto, mantendo o foco na reprodutibilidade e na comparação entre PolyHok e outras implementações CUDA.
 
+\section{Preparação multilinguagem dos dados Sentinel-2}
+\label{sec:preparacao-multilinguagem}
+
+A preparação das entradas do benchmark exigiu operações que pertencem a dois
+domínios distintos. De um lado, foi necessário coordenar execuções, controlar o
+ciclo de vida de processos, tratar falhas e manter uma interface uniforme para o
+restante da aplicação. De outro, foi preciso interpretar a estrutura dos produtos
+Sentinel-2, ler imagens georreferenciadas, validar grades espaciais, realizar
+recortes e converter os valores radiométricos para uma representação numérica
+adequada aos experimentos. Em vez de concentrar todas essas responsabilidades em
+uma única linguagem, adotou-se uma arquitetura multilinguagem na qual Elixir e
+Python desempenham funções complementares.
+
+\subsection{Motivação para a abordagem multilinguagem}
+
+Elixir foi mantido como linguagem de coordenação do pipeline por oferecer, sobre a
+BEAM e o conjunto de abstrações do OTP, mecanismos apropriados para concorrência,
+supervisão e isolamento de tarefas~\cite{elixirDocs2026,erlangOtpDocs2026}. Essas
+características são úteis para iniciar uma preparação, acompanhar sua execução,
+aplicar limites de tempo, impedir solicitações simultâneas conflitantes e
+transformar diferentes condições de término em resultados explícitos. Entretanto,
+o ecossistema Elixir não possui a mesma variedade de bibliotecas consolidadas para
+processamento geoespacial e manipulação de rasters disponível no ecossistema
+Python.
+
+Python foi escolhido para a transformação dos dados por permitir combinar
+bibliotecas maduras de computação numérica, processamento de imagens e leitura de
+formatos geoespaciais. Nesse ambiente, a biblioteca Rasterio fornece acesso aos
+arquivos raster e às propriedades de sua grade espacial, enquanto NumPy permite
+representar e transformar eficientemente as matrizes. Essa combinação reduz a
+necessidade de implementar leitores de \texttt{JP2}, interpretação de
+georreferenciamento e operações matriciais de baixo nível especificamente para o
+projeto. A escolha também diminui o risco de introduzir erros em uma etapa que deve
+preservar tanto os valores radiométricos quanto a correspondência espacial entre as
+bandas.
+
+A divisão adotada não representa uma duplicação de responsabilidades. Python atua
+como produtor dos artefatos numéricos preparados, enquanto Elixir atua como
+orquestrador e verificador da operação. Dessa forma, cada linguagem é empregada na
+parte em que seu ecossistema oferece abstrações mais adequadas, sem misturar o
+processamento geoespacial com a coordenação concorrente do restante do sistema.
+
+\begin{table}[htbp]
+\centering
+\caption{Síntese da arquitetura de preparação dos dados}
+\label{tab:arquitetura-preparacao-dados}
+\begin{tabular}{p{0.20\textwidth} p{0.25\textwidth} p{0.43\textwidth}}
+\hline
+\textbf{Camada} & \textbf{Tecnologia principal} & \textbf{Responsabilidade} \\
+\hline
+Descoberta & Python e parser XML & Localizar as bandas B04 e B08, interpretar os metadados do produto e obter identidade, parâmetros radiométricos e proveniência. \\
+Processamento raster & Python, Rasterio e NumPy & Validar a compatibilidade espacial, extrair recortes alinhados e converter os números digitais em reflectância de superfície. \\
+Persistência & Sistema de arquivos & Armazenar matrizes, metadados, visualizações e checksums segundo um contrato binário explícito. \\
+Interface entre linguagens & Processo externo e arquivos & Transportar argumentos, estado de término e diagnóstico pelo processo, mantendo os dados volumosos no sistema de arquivos. \\
+Orquestração e validação & Elixir, BEAM e OTP & Supervisionar a execução, controlar concorrência e tempo limite e validar os artefatos antes de confirmar o sucesso. \\
+\hline
+\end{tabular}
+\begin{flushleft}
+{\small Fonte: Elaborada pelo autor.}
+\end{flushleft}
+\end{table}
+
+\subsection{Fluxo de preparação geoespacial}
+
+O fluxo recebe como entrada um produto Sentinel-2 L2A no formato \texttt{SAFE},
+sigla para \textit{Standard Archive Format for Europe}. Embora seja comum tratar o
+produto como um arquivo durante seu download, após sua extração ele aparece no
+sistema de arquivos como um diretório terminado em \texttt{.SAFE}, e não como uma
+única imagem. Esse diretório funciona como um pacote padronizado que reúne, em uma
+estrutura hierárquica, os metadados do produto em XML, os tiles no subdiretório
+\texttt{GRANULE}, as imagens de cada banda e resolução em JPEG 2000, indicadores de
+qualidade e informações auxiliares. Portanto, uma cena Sentinel-2 é representada
+por um conjunto de arquivos relacionados que devem ser interpretados em conjunto,
+e não por um único raster~\cite{esaSafe}.
+
+O nível L2A fornece reflectância de superfície, também denominada reflectância na
+base da atmosfera, ou BOA. A partir da estrutura do produto, são localizados o
+arquivo geral de metadados, os metadados do tile e as bandas B04 e B08 na resolução
+de 10 metros. A descoberta é estrita: a ausência ou ambiguidade de qualquer arquivo
+obrigatório encerra a preparação com erro, em vez de escolher silenciosamente uma
+entrada possivelmente incorreta.
+
+Os metadados em XML fornecem a identidade do produto, o identificador do tile, o
+instante de aquisição, os valores reservados para pixels sem dados ou saturados e
+os parâmetros usados na conversão radiométrica. Os valores armazenados nos rasters
+são números digitais inteiros. Para cada banda, a reflectância de superfície é
+obtida por meio da Equação~\ref{eq:conversao-reflectancia}.
+
+\begin{equation}
+\label{eq:conversao-reflectancia}
+\rho_b = \frac{DN_b + O_b}{Q}
+\end{equation}
+
+Na equação, $DN_b$ é o número digital do pixel na banda $b$, $O_b$ é o deslocamento
+radiométrico específico dessa banda e $Q$ é o valor de quantificação informado no
+produto. Os parâmetros são lidos do próprio produto, evitando incorporar ao código
+um valor presumido para todas as cenas. Pixels marcados como ausentes ou saturados
+em qualquer uma das duas bandas são representados como \texttt{NaN} em ambas. Essa
+decisão mantém uma máscara inválida comum e impede que uma posição válida de uma
+banda seja posteriormente combinada com uma posição inválida da outra.
+
+Antes da leitura dos pixels, as grades espaciais de B04 e B08 são comparadas. A
+verificação considera dimensões, sistema de referência de coordenadas, origem,
+resolução do pixel, limites espaciais e transformação afim. O sistema de referência
+de coordenadas, identificado pela sigla CRS, define como as coordenadas numéricas da
+imagem correspondem a posições na superfície terrestre. Assim, dimensões iguais não
+são suficientes: as duas matrizes precisam representar a mesma área e a mesma
+posição para que seus pixels possam ser combinados de forma válida.
+
+Confirmado o alinhamento, uma mesma janela central é aplicada às duas bandas. Foram
+preparadas entradas quadradas de \texttt{1024 x 1024}, \texttt{4096 x 4096} e
+\texttt{8192 x 8192} pixels. Os tamanhos crescentes permitem utilizar exatamente a
+mesma cena em diferentes escalas experimentais, preservando o alinhamento entre as
+bandas e tornando determinístico o procedimento de recorte. Ao final da conversão,
+cada banda é representada como uma matriz de ponto flutuante de 32 bits.
+
+\subsection{Contrato de arquivos e comunicação entre Elixir e Python}
+
+A comunicação foi projetada para evitar o envio das matrizes pela saída textual do
+processo ou por mensagens entre processos da BEAM. Para o maior recorte, cada banda
+possui dezenas de milhões de elementos, de modo que serializar esses valores como
+texto aumentaria o volume transferido, exigiria conversões adicionais e ampliaria o
+consumo de memória. Em seu lugar, os dados volumosos permanecem no sistema de
+arquivos, enquanto a comunicação direta entre Elixir e Python transporta apenas
+argumentos, estado de término e um diagnóstico limitado.
+
+Elixir cria um processo externo para executar o preparador Python e fornece, como
+argumentos separados, o caminho do produto, a raiz do projeto e, quando disponível,
+a identificação de sua origem. O uso de argumentos separados dispensa a construção
+de uma linha de comando interpretada por um shell, reduzindo ambiguidades de
+escapamento e mantendo explícita a fronteira entre executável e parâmetros. Durante
+a execução, a saída do processo é coletada para diagnóstico, mas o resultado
+numérico é publicado exclusivamente como artefato binário.
+
+Cada recorte contém duas matrizes, um arquivo de metadados e uma visualização para
+inspeção. As matrizes são gravadas sem cabeçalho, em ordem de linhas, com elementos
+\texttt{float32} e ordem de bytes \textit{little-endian}. O arquivo de metadados
+registra dimensões, ordem de memória, ordem de bytes, CRS, origem, resolução,
+posição do recorte, parâmetros radiométricos, caminhos relativos e checksums
+SHA-256. Esse contrato torna a representação independente dos detalhes internos do
+programa que a produziu: qualquer consumidor que respeite essas informações pode
+interpretar os mesmos bytes de maneira determinística.
+
+Além dos metadados individuais, um manifesto global mantém o índice das cenas
+preparadas. A presença isolada de arquivos não é considerada evidência de conclusão,
+pois uma interrupção pode ocorrer no meio da escrita. Por esse motivo, os artefatos
+são inicialmente produzidos em uma área parcial, validados e promovidos para seus
+caminhos definitivos. O manifesto é atualizado somente depois da publicação e da
+validação dos três recortes, funcionando como o ponto lógico que torna a cena
+disponível para as etapas seguintes.
+
+\subsection{Orquestração e validação em Elixir}
+
+Na camada de coordenação, cada solicitação é executada por um processo leve e
+supervisionado. Um registro associa o identificador da cena ao processo responsável
+por sua preparação. Como as chaves desse registro são únicas, uma segunda
+solicitação ativa para a mesma cena é rejeitada, evitando que duas execuções
+modifiquem simultaneamente os mesmos artefatos. Um supervisor dinâmico controla o
+ciclo de vida desses trabalhadores, que são criados sob demanda e encerrados após a
+conclusão da tarefa.
+
+O processo de coordenação acompanha a saída do preparador, espera seu código de
+término e aplica um limite de tempo. Um término diferente de zero, a ausência do
+executável ou o esgotamento do tempo são convertidos em resultados de erro
+explícitos. Quando Python termina com sucesso, Elixir não aceita imediatamente o
+resultado: ele realiza uma validação independente do estado publicado.
+
+Essa segunda validação é necessária porque o código de término informa apenas que o
+processo externo considerou sua execução bem-sucedida. Ele não demonstra, por si
+só, que todos os arquivos existem, possuem o tamanho esperado ou permaneceram
+íntegros. O validador em Elixir relê o manifesto e os metadados, confirma a
+identidade e o checksum da fonte, verifica a presença dos três recortes, restringe
+os caminhos à raiz do projeto e recalcula o SHA-256 das matrizes. O sucesso só é
+retornado quando o término normal do processo e a validade do estado persistido são
+confirmados. Essa estratégia estabelece uma fronteira de confiança explícita entre
+o produtor Python e a aplicação Elixir.
+
+Quando uma cena já possui artefatos íntegros e sua fonte não foi modificada, a
+preparação pode ser reutilizada. A decisão não se baseia apenas na existência dos
+arquivos: são comparados a identidade do produto, o checksum da fonte, o manifesto,
+os metadados, os tamanhos e os checksums das matrizes. Com isso, execuções repetidas
+evitam trabalho desnecessário sem comprometer a rastreabilidade do benchmark.
+
+\subsection{Relação com conceitos de Sistemas Operacionais}
+
+Para a implementação da etapa de preparação dos dados foram aproveitados
+conhecimentos provenientes de diversas matérias da grade curricular, porém
+principalmente conceitos abordados em Sistemas Operacionais e também em
+Processamento Paralelo. Da primeira área foram aplicadas as noções de processo,
+isolamento e comunicação entre processos. O preparador Python é executado como um
+processo externo, com ciclo de vida e código de término próprios, enquanto Elixir
+acompanha sua execução, coleta o diagnóstico e trata falhas e limites de tempo. A
+comunicação utiliza um canal de controle para argumentos e estado de término, e o
+sistema de arquivos para os dados volumosos, evitando transferir as matrizes como
+texto entre as duas linguagens.
+
+Também foram importantes os conceitos de representação binária, sistema de arquivos
+e concorrência. As matrizes possuem um contrato explícito de tipo, ordem dos
+elementos e ordem dos bytes. A distinção entre arquiteturas \textit{little-endian}
+e \textit{big-endian} é relevante porque a inversão da ordem dos bytes altera o
+valor numérico interpretado. Para lidar com interrupções, os resultados são
+produzidos inicialmente em caminhos parciais e o manifesto é atualizado somente
+após sua validação. Checksums permitem verificar a integridade dos arquivos, e o
+registro de processos impede duas preparações simultâneas da mesma cena.
 
 % \chapter{Conclusão}
 
