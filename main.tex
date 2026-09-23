@@ -1019,7 +1019,7 @@ fronteiras.
 
 O kernel utiliza a operação binária oferecida por \texttt{Ske.map2/3}. Cada
 \textit{thread} calcula um índice linear, verifica se ele pertence à matriz e, em
-caso afirmativo, processa no máximo um par de elementos B04 e B08. A verificação de
+caso afirmativo, processa um par de elementos B04 e B08. A verificação de
 limites é necessária porque a quantidade de \textit{threads} lançada pode ser
 maior que a quantidade de pixels quando o número de elementos não é múltiplo do
 tamanho do bloco.
@@ -1080,7 +1080,7 @@ das estruturas internas do Elixir, do Nx ou do PolyHok.
 
 \subsection{Validação e limites do protótipo}
 
-A validação foi dividida entre testes que não exigem GPU e testes executados no
+A validação foi dividida entre testes automatizados que não exigem GPU e testes executados no
 ambiente CUDA. Os primeiros verificam a rejeição de tipos e formas incompatíveis,
 a representação binária, os metadados, o checksum e o comportamento diante de
 falhas de publicação. Os testes em GPU utilizam uma matriz sintética pequena com
@@ -1089,13 +1089,6 @@ negativos, propagação de \texttt{NaN}, denominadores com zero positivo e negat
 ausência de limiar epsilon e preservação de resultados fora do intervalo usual do
 NDVI. O tamanho sintético também exercita a proteção das \textit{threads} que
 excedem o número de elementos.
-
-Nesta etapa ainda não foram implementados o protocolo estatístico do benchmark, as
-repetições e aquecimentos, a execução em lote ou a versão CUDA C/C++ direta. Também
-não foi introduzida uma implementação CPU do NDVI no fluxo normal. O resultado
-alcançado é, portanto, um protótipo funcional e verificável do caminho PolyHok, com
-fronteiras preparadas para a instrumentação posterior, e não ainda a avaliação
-comparativa de desempenho proposta pelo trabalho.
 
 % \chapter{Conclusão}
 
