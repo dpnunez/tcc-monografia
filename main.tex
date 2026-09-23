@@ -946,6 +946,157 @@ produzidos inicialmente em caminhos parciais e o manifesto é atualizado somente
 após sua validação. Checksums permitem verificar a integridade dos arquivos, e o
 registro de processos impede duas preparações simultâneas da mesma cena.
 
+\section{Implementação do cálculo de NDVI via PolyHok}
+\label{sec:implementacao-ndvi-polyhok}
+
+Após a preparação das bandas, foi implementado o núcleo de cálculo de NDVI que
+será usado como primeira versão acelerada do estudo. Embora sua interface e sua
+coordenação estejam escritas em Elixir, a operação numérica não é executada pela
+BEAM nem por uma implementação sequencial em CPU. Elixir valida as entradas,
+organiza as etapas e aciona o PolyHok, enquanto o cálculo ponto a ponto é realizado
+por um kernel CUDA na GPU. Essa separação mantém a linguagem de alto nível no papel
+de coordenadora do fluxo e reserva ao dispositivo acelerador a parte densa da
+computação.
+
+A implementação foi dividida em dois módulos com responsabilidades distintas. O
+primeiro recebe as matrizes B04 e B08 como tensores Nx, transfere-as para a GPU,
+executa o kernel e devolve o tensor resultante ao host. O segundo persiste esse
+resultado em um formato binário reproduzível. A escrita em disco é uma operação
+explícita e posterior ao cálculo, de modo que seu custo não seja incorporado
+acidentalmente às futuras medições de transferência ou de execução do kernel.
+
+\subsection{Interface e validação das entradas}
+
+A operação pública recebe diretamente dois tensores Nx bidimensionais, um para B04
+e outro para B08. Esse formato corresponde à saída produzida pelo leitor dos
+artefatos preparados e evita que o núcleo numérico conheça detalhes sobre cenas,
+arquivos geoespaciais, manifesto ou metadados. Antes de acessar a GPU, a interface
+verifica quatro propriedades: ambos os argumentos devem ser tensores Nx, devem usar
+elementos \texttt{float32}, devem possuir duas dimensões não vazias e devem ter a
+mesma forma.
+
+As verificações são realizadas antes de qualquer alocação ou transferência para o
+dispositivo. Entradas incompatíveis produzem um erro de argumento com indicação da
+condição violada. Em contrapartida, falhas provenientes do PolyHok, da interface
+nativa, da alocação ou do ambiente CUDA não são convertidas em um resultado de
+sucesso nem ocultadas por uma camada genérica de tratamento. Elas são propagadas ao
+host, preservando a causa técnica para diagnóstico.
+
+Essa interface deliberadamente pequena também impede que atividades externas ao
+cálculo sejam confundidas com o núcleo avaliado. A leitura dos arquivos B04 e B08,
+a seleção do recorte e a preparação radiométrica acontecem antes da chamada. Da
+mesma forma, a persistência do NDVI ocorre apenas se o chamador a solicitar após o
+retorno do tensor ao host.
+
+\subsection{Fluxo de execução na GPU}
+
+O fluxo foi decomposto em três fronteiras públicas e individualmente acionáveis. A
+operação completa apenas as compõe na seguinte ordem:
+
+\begin{enumerate}
+  \item transferência dos tensores B04 e B08 da memória do host para a GPU;
+  \item execução de uma única chamada do kernel de NDVI sobre as duas entradas;
+  \item transferência do tensor NDVI da GPU de volta para a memória do host.
+\end{enumerate}
+
+Na primeira etapa, cada tensor Nx é entregue a \texttt{PolyHok.new\_gnx/1}, que
+cria sua representação no dispositivo. As referências resultantes permanecem
+opacas para a aplicação: o código de coordenação não acessa diretamente os
+endereços ou o conteúdo da memória CUDA. Na segunda etapa, essas duas referências
+são fornecidas a \texttt{Ske.map2/3}. Essa primitiva aplica uma função binária aos
+elementos correspondentes das entradas e produz uma terceira matriz na GPU. Por
+fim, \texttt{PolyHok.get\_gnx/1} copia o resultado para o host e o reconstrói como
+um tensor Nx \texttt{float32} com a mesma forma das bandas.
+
+A separação não introduz medição de desempenho nesta etapa, mas estabelece pontos
+nos quais a instrumentação poderá ser adicionada posteriormente. Assim, o custo da
+transferência host--dispositivo, da chamada do kernel e da transferência
+dispositivo--host poderá ser observado sem reescrever a fórmula ou alterar a
+interface do núcleo numérico. A preparação dos dados permanece fora dessas três
+fronteiras.
+
+\subsection{Kernel e contrato numérico}
+
+O kernel utiliza a operação binária oferecida por \texttt{Ske.map2/3}. Cada
+\textit{thread} calcula um índice linear, verifica se ele pertence à matriz e, em
+caso afirmativo, processa no máximo um par de elementos B04 e B08. A verificação de
+limites é necessária porque a quantidade de \textit{threads} lançada pode ser
+maior que a quantidade de pixels quando o número de elementos não é múltiplo do
+tamanho do bloco.
+
+Para uma posição válida, o kernel calcula a expressão apresentada na
+Equação~\ref{eq:ndvi-polyhok}.
+
+\begin{equation}
+\label{eq:ndvi-polyhok}
+NDVI = \frac{B08 - B04}{B08 + B04}
+\end{equation}
+
+Toda a aritmética é realizada em ponto flutuante de 32 bits, compatível com os
+artefatos preparados. Se B04 ou B08 contiver \texttt{NaN}, o resultado da mesma
+posição também será \texttt{NaN}. Quando o denominador for exatamente zero,
+incluindo os casos de zero positivo e negativo, o kernel produz \texttt{NaN}. Para
+qualquer denominador diferente de zero, a divisão é realizada normalmente, sem a
+adição de epsilon. O resultado também não é limitado ao intervalo $[-1,1]$ e não
+recebe máscara, classificação ou transformação geoespacial.
+
+Essas decisões definem um contrato numérico comum para as implementações que serão
+comparadas. Em particular, o tratamento explícito dos valores inválidos impede que
+a futura versão CUDA C/C++ adote uma fórmula apenas aproximadamente equivalente e
+produza diferenças que poderiam ser confundidas com efeitos da ferramenta de
+programação. O cálculo completo usa uma única chamada de kernel, sem uma passagem
+adicional para criar máscaras ou corrigir resultados.
+
+Uma particularidade encontrada durante a integração foi o registro do código do
+kernel no mecanismo JIT do PolyHok. Nos exemplos em que definição e execução
+ocorrem no mesmo processo, o metadado necessário permanece disponível em memória.
+Em uma aplicação Mix já compilada, porém, o processo temporário usado na compilação
+não preserva esse estado até a execução. Por esse motivo, antes de chamar
+\texttt{Ske.map2/3}, a implementação registra novamente no servidor JIT a árvore
+sintática do kernel de mapeamento entre duas entradas. Esse registro não transfere
+matrizes nem lança o kernel; ele apenas restaura o metadado exigido para que a
+primitiva possa ser materializada e executada no processo da aplicação.
+
+\subsection{Persistência do resultado}
+
+O tensor devolvido ao host pode ser persistido por uma operação separada. O arquivo
+\texttt{ndvi.polyhok.f32} contém somente os valores \texttt{float32}, sem
+cabeçalho, em ordem de linhas e com bytes em ordem \textit{little-endian}. Antes da
+publicação, o tamanho é comparado com o valor esperado de quatro bytes por elemento
+e é calculado um checksum SHA-256.
+
+O arquivo \texttt{metadata.json} registra largura, altura, tipo numérico, ordem dos
+bytes, ordem dos elementos, nome do binário e checksum. Tanto o binário quanto os
+metadados são inicialmente escritos com um sufixo parcial. O binário é validado e
+promovido primeiro; os metadados são promovidos por último e funcionam como ponto
+de confirmação da publicação. Se a escrita, a validação ou a promoção falhar, a
+tentativa não deixa novos metadados finais que poderiam anunciar como completo um
+resultado parcial.
+
+Esse formato é intencionalmente compatível com o contrato empregado nas bandas de
+entrada. Além de facilitar a inspeção e a reprodução do resultado, ele permite que
+outras implementações leiam ou produzam a mesma disposição de dados sem depender
+das estruturas internas do Elixir, do Nx ou do PolyHok.
+
+\subsection{Validação e limites do protótipo}
+
+A validação foi dividida entre testes que não exigem GPU e testes executados no
+ambiente CUDA. Os primeiros verificam a rejeição de tipos e formas incompatíveis,
+a representação binária, os metadados, o checksum e o comportamento diante de
+falhas de publicação. Os testes em GPU utilizam uma matriz sintética pequena com
+resultados previamente determinados para verificar valores positivos, nulos e
+negativos, propagação de \texttt{NaN}, denominadores com zero positivo e negativo,
+ausência de limiar epsilon e preservação de resultados fora do intervalo usual do
+NDVI. O tamanho sintético também exercita a proteção das \textit{threads} que
+excedem o número de elementos.
+
+Nesta etapa ainda não foram implementados o protocolo estatístico do benchmark, as
+repetições e aquecimentos, a execução em lote ou a versão CUDA C/C++ direta. Também
+não foi introduzida uma implementação CPU do NDVI no fluxo normal. O resultado
+alcançado é, portanto, um protótipo funcional e verificável do caminho PolyHok, com
+fronteiras preparadas para a instrumentação posterior, e não ainda a avaliação
+comparativa de desempenho proposta pelo trabalho.
+
 % \chapter{Conclusão}
 
 % Bla blabla blablabla bla.  Bla blabla blablabla bla.  Bla blabla
